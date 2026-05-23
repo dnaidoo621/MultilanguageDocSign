@@ -1,0 +1,35 @@
+# ---- .NET ----
+bin/
+obj/
+*.user
+*.suo
+.vs/
+# Local/secret config — never commit
+**/appsettings.Development.json
+**/appsettings.*.Local.json
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+next-env.d.ts
+.turbo/
+
+# ---- Env files ----
+.env
+.env.*
+!.env.example
+
+# ---- Python (ML sidecar, Phase 1) ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ---- OS / IDE ----
+.DS_Store
+.idea/
+*.swp
+
+# ---- Misc ----
+*.log

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LinguaSign.Api/LinguaSign.Api.csproj" />
+    <Project Path="src/LinguaSign.Shared/LinguaSign.Shared.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/">
+    <Project Path="src/Modules/LinguaSign.Analysis/LinguaSign.Analysis.csproj" />
+    <Project Path="src/Modules/LinguaSign.Audit/LinguaSign.Audit.csproj" />
+    <Project Path="src/Modules/LinguaSign.Documents/LinguaSign.Documents.csproj" />
+    <Project Path="src/Modules/LinguaSign.Export/LinguaSign.Export.csproj" />
+    <Project Path="src/Modules/LinguaSign.Signing/LinguaSign.Signing.csproj" />
+    <Project Path="src/Modules/LinguaSign.Translation/LinguaSign.Translation.csproj" />
+  </Folder>
+</Solution>

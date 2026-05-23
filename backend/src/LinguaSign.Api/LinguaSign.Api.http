@@ -1,0 +1,6 @@
+@LinguaSign.Api_HostAddress = http://localhost:5291
+
+GET {{LinguaSign.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

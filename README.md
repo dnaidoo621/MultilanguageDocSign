@@ -273,7 +273,7 @@ A one-time GPU investment becomes worthwhile only after volume justifies it — 
 
 ## Contributing
 
-- Commits are plain and descriptive — **no AI co-author / attribution trailers**.
+- Commits are plain and descriptive — .
 - Keep module boundaries intact: cross-module access goes through public contracts, not internals.
 - Secrets never get committed (`.env`, `appsettings.Development.json`, and user-secrets are git-ignored).
 

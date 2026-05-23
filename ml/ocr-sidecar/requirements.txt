@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pypdfium2>=4.30
+# Surya's API evolves quickly — if the predictor call signature differs after install,
+# adjust the /ocr handler in main.py (the JSON contract to the backend stays the same).
+surya-ocr>=0.6

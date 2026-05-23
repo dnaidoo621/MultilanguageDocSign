@@ -1,16 +1,33 @@
+using LinguaSign.Documents.Ocr;
+using LinguaSign.Documents.Persistence;
+using LinguaSign.Documents.Services;
+using LinguaSign.Documents.Storage;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LinguaSign.Documents;
 
 /// <summary>
-/// Documents module — PDF upload, metadata, and storage orchestration.
-/// Phase 1 will add upload handling, object-storage integration, and OCR job dispatch.
+/// Documents module — PDF upload, metadata, storage, and OCR orchestration.
 /// </summary>
 public static class DocumentsModule
 {
-    public static IServiceCollection AddDocumentsModule(this IServiceCollection services)
+    public static IServiceCollection AddDocumentsModule(this IServiceCollection services, IConfiguration config)
     {
-        // TODO Phase 1: register upload, storage, and OCR-orchestration services.
+        services.AddDbContext<LinguaSignDbContext>(opt =>
+            opt.UseNpgsql(config.GetConnectionString("Postgres")));
+
+        services.AddScoped<IDocumentStorage, LocalFileDocumentStorage>();
+        services.AddScoped<IDocumentService, DocumentService>();
+        services.AddScoped<IOcrProcessingService, OcrProcessingService>();
+
+        services.AddHttpClient<IOcrService, SuryaOcrClient>(client =>
+        {
+            client.BaseAddress = new Uri(config["Ocr:BaseUrl"] ?? "http://localhost:8000");
+            client.Timeout = TimeSpan.FromMinutes(5);
+        });
+
         return services;
     }
 }

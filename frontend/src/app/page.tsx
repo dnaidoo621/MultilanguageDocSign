@@ -10,8 +10,15 @@ export default function Home() {
         </p>
       </div>
 
+      <a
+        href="/dashboard"
+        className="rounded-full bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
+      >
+        Get started
+      </a>
+
       <div className="rounded-lg border border-gray-200 px-4 py-2 text-xs text-gray-400">
-        Phase 0 scaffold · Next.js + Supabase auth · .NET 10 modular monolith backend
+        Phase 1 · upload + OCR · Next.js + Supabase · .NET 10 backend
       </div>
 
       <p className="max-w-md text-xs text-gray-400">

@@ -49,11 +49,12 @@ of what was translated and signed.
 
 ## Features
 
-**Available (Phase 0):**
-- Project scaffold: authenticated app shell (Supabase) + modular backend.
+**Available:**
+- Authenticated app shell (Supabase) + modular backend (Phase 0).
+- 📄 **Document upload & OCR** — PDF upload, background OCR via the Surya sidecar, and a
+  viewer that overlays extracted text blocks with bounding boxes on the original PDF (Phase 1).
 
 **Planned (by phase):**
-- 📄 **Document upload & OCR** — text, layout, and coordinate extraction (Phase 1).
 - 🌐 **Bilingual viewer** — original and translation side-by-side, synchronized scrolling, clause
   linking, and click-to-explain (Phase 2).
 - ✍️ **Digital signing** — legally-meaningful e-signatures via Documenso, with full metadata (Phase 3).
@@ -122,21 +123,21 @@ the option to split later — without paying the distributed-systems tax up fron
 ```
 .
 ├── README.md
-├── .gitignore
+├── docker-compose.yml              # local Postgres (+ optional OCR sidecar)
 ├── frontend/                       # Next.js app
-│   ├── .env.example
 │   └── src/
-│       ├── app/                    # App Router pages
-│       └── lib/supabase/           # Browser + server Supabase clients
-│           ├── client.ts
-│           └── server.ts
+│       ├── app/                    # routes: / , /dashboard , /documents/[id]
+│       ├── components/             # AuthForm, UploadDropzone, DocumentList, PdfBlockViewer
+│       └── lib/                    # api client, types, useUser, supabase clients
+├── ml/
+│   └── ocr-sidecar/                # FastAPI + Surya OCR service (main.py, Dockerfile)
 └── backend/
     ├── LinguaSign.slnx             # .NET 10 solution (new .slnx format)
     └── src/
-        ├── LinguaSign.Api/         # Host: composition root, JWT auth, endpoints
+        ├── LinguaSign.Api/         # Host: composition root, JWT auth, endpoints, Hangfire
         ├── LinguaSign.Shared/      # Shared kernel — cross-cutting primitives & contracts
         └── Modules/
-            ├── LinguaSign.Documents/    # Upload, metadata, storage          (Phase 1)
+            ├── LinguaSign.Documents/    # Upload, storage, OCR, EF Core      (Phase 1) ✅
             ├── LinguaSign.Translation/  # Segmentation, glossary, translate  (Phase 2)
             ├── LinguaSign.Signing/      # Documenso integration              (Phase 3)
             ├── LinguaSign.Analysis/     # Risk detection + explanations      (Phase 4)
@@ -168,7 +169,22 @@ keeping module internals encapsulated behind a single composition seam in `Progr
 Sign up at [supabase.com](https://supabase.com), create a project, then grab the **Project URL**
 and **anon public key** from **Project Settings → API**.
 
-### 2. Backend
+### 2. Start local dependencies
+
+```bash
+docker compose up -d            # Postgres on :5432
+```
+
+### 3. OCR sidecar
+
+```bash
+cd ml/ocr-sidecar
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000   # first run downloads Surya weights
+```
+
+### 4. Backend
 
 ```bash
 cd backend
@@ -177,7 +193,7 @@ cd backend
 dotnet user-secrets init --project src/LinguaSign.Api
 dotnet user-secrets set "Supabase:Url" "https://<your-project>.supabase.co" --project src/LinguaSign.Api
 
-dotnet run --project src/LinguaSign.Api
+dotnet run --project src/LinguaSign.Api   # applies EF migrations on startup (dev)
 ```
 
 Verify it's up:
@@ -187,14 +203,20 @@ curl http://localhost:5080/health
 # → {"status":"ok","service":"LinguaSign.Api"}
 ```
 
-### 3. Frontend
+The default `ConnectionStrings:Postgres` and `Ocr:BaseUrl` already point at the compose
+Postgres and the local sidecar. The Hangfire dashboard is at `/hangfire` (dev).
+
+### 5. Frontend
 
 ```bash
 cd frontend
 cp .env.example .env.local      # fill in your Supabase URL + anon key
 npm install
-npm run dev                     # http://localhost:3000
+npm run dev                     # http://localhost:3000  → open /dashboard
 ```
+
+**End-to-end:** sign in on `/dashboard`, upload a PDF, watch its status move
+`Uploaded → Processing → Extracted`, then open it to see extracted blocks overlaid on the PDF.
 
 ## Configuration
 
@@ -221,9 +243,13 @@ Environment variable form uses `__` as the separator, e.g. `Supabase__Url`.
 |--------|-------|------|-------------|
 | `GET` | `/health` | none | Liveness probe |
 | `GET` | `/me` | required | Returns the authenticated user's `sub` and `email` claims |
+| `POST` | `/api/documents` | required | Upload a PDF (multipart, field `file`); enqueues OCR |
+| `GET` | `/api/documents` | required | List the caller's documents |
+| `GET` | `/api/documents/{id}` | required | Document detail incl. pages + extracted blocks |
+| `GET` | `/api/documents/{id}/file` | required | Download the original PDF |
 | `GET` | `/openapi/v1.json` | none (dev) | OpenAPI document |
 
-More endpoints are added per phase (document upload in Phase 1, etc.).
+All `/api/documents` routes are scoped to the authenticated user.
 
 ## Development
 
@@ -240,13 +266,25 @@ npm run build                     # production build
 npm run lint                      # lint
 ```
 
+### EF Core migrations
+
+```bash
+cd backend
+dotnet ef migrations add <Name> \
+  --project src/Modules/LinguaSign.Documents \
+  --startup-project src/Modules/LinguaSign.Documents
+```
+
+Migrations apply automatically on backend startup in development. The design-time
+connection can be overridden with the `LINGUASIGN_DB` environment variable.
+
 ## Roadmap
 
 | Phase | Focus | Status |
 |-------|-------|--------|
 | 0 | Scaffold (auth, modular backend, app shell) | ✅ Done |
-| 1 | Upload → OCR → render extracted blocks | ⏭ Next |
-| 2 | Bilingual viewer (translation + synced panes) — **validation milestone** | |
+| 1 | Upload → OCR → render extracted blocks | ✅ Done |
+| 2 | Bilingual viewer (translation + synced panes) — **validation milestone** | ⏭ Next |
 | 3 | Signing (Documenso) + audit trail + export | |
 | 4 | Risk detection + clause explanations | |
 

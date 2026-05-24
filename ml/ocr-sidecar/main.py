@@ -16,6 +16,7 @@ import io
 import pypdfium2 as pdfium
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from surya.detection import DetectionPredictor
+from surya.foundation import FoundationPredictor
 from surya.recognition import RecognitionPredictor
 
 # Render scale: ~144 DPI. Bounding boxes are returned at this resolution and the
@@ -25,8 +26,10 @@ RENDER_SCALE = 2.0
 app = FastAPI(title="LinguaSign OCR Sidecar")
 
 # Models are heavy — load once at process start. First run downloads weights.
+# Recognition is built on the shared foundation model; device defaults to MPS on Apple Silicon.
+foundation_predictor = FoundationPredictor()
+recognition_predictor = RecognitionPredictor(foundation_predictor)
 detection_predictor = DetectionPredictor()
-recognition_predictor = RecognitionPredictor()
 
 
 @app.get("/health")
@@ -45,21 +48,25 @@ async def ocr(file: UploadFile = File(...)):
 
     images, sizes = _render_pages(data)
 
-    # Surya: detect text regions, then recognize. Language is auto-detected.
-    predictions = recognition_predictor(images, det_predictor=detection_predictor)
+    # Surya 0.17: detect text regions then recognize. `task_names` selects the
+    # OCR-with-layout output; returns List[OCRResult], each with `.text_lines`.
+    predictions = recognition_predictor(
+        images,
+        task_names=["ocr_with_boxes"] * len(images),
+        det_predictor=detection_predictor,
+    )
 
     pages = []
     for index, prediction in enumerate(predictions):
         width, height = sizes[index]
         blocks = []
         for line in getattr(prediction, "text_lines", []):
-            bbox = [float(c) for c in line.bbox]  # [x0, y0, x1, y1]
             blocks.append(
                 {
                     "text": line.text,
                     "language": None,  # populated in a later phase
                     "confidence": float(getattr(line, "confidence", 0.0) or 0.0),
-                    "bbox": bbox,
+                    "bbox": _line_bbox(line),  # [x0, y0, x1, y1]
                 }
             )
         pages.append(
@@ -72,6 +79,19 @@ async def ocr(file: UploadFile = File(...)):
         )
 
     return {"pages": pages}
+
+
+def _line_bbox(line):
+    """Return [x0, y0, x1, y1] from a Surya TextLine (bbox property or polygon points)."""
+    bbox = getattr(line, "bbox", None)
+    if bbox:
+        return [float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])]
+    poly = getattr(line, "polygon", None) or []
+    xs = [float(p[0]) for p in poly]
+    ys = [float(p[1]) for p in poly]
+    if not xs or not ys:
+        return [0.0, 0.0, 0.0, 0.0]
+    return [min(xs), min(ys), max(xs), max(ys)]
 
 
 def _render_pages(pdf_bytes: bytes):

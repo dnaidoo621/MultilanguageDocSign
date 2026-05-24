@@ -1,7 +1,11 @@
+# Requires Python 3.10+ (Surya uses 3.10+ syntax).
 fastapi>=0.115
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9
 pypdfium2>=4.30
-# Surya's API evolves quickly — if the predictor call signature differs after install,
-# adjust the /ocr handler in main.py (the JSON contract to the backend stays the same).
-surya-ocr>=0.6
+requests>=2.31
+# surya-ocr declares transformers>=4.56.1 with no upper bound; transformers 5.x has
+# breaking config changes (missing pad_token_id), so pin to 4.x.
+transformers>=4.56.1,<5
+# Surya's API evolves quickly — this targets surya-ocr 0.17.x (task_names + text_lines.polygon).
+surya-ocr>=0.13,<0.18

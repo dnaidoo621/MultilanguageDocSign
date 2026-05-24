@@ -79,6 +79,7 @@ function PageWithBlocks({
         {page.blocks.map((b) => (
           <div
             key={b.id}
+            data-testid="ocr-block"
             title={b.text}
             onMouseEnter={() => onHover(b.id)}
             onMouseLeave={() => onHover(null)}

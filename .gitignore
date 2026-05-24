@@ -31,5 +31,11 @@ venv/
 .idea/
 *.swp
 
+# ---- Playwright ----
+test-results/
+playwright-report/
+blob-report/
+.last-run.json
+
 # ---- Misc ----
 *.log

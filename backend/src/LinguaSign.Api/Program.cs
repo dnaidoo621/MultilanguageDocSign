@@ -10,6 +10,8 @@ using LinguaSign.Documents.Services;
 using LinguaSign.Export;
 using LinguaSign.Signing;
 using LinguaSign.Translation;
+using LinguaSign.Translation.Persistence;
+using LinguaSign.Translation.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -82,7 +84,7 @@ builder.Services.AddHangfireServer();
 // --- Modular monolith: each module owns its own service registration ---
 builder.Services
     .AddDocumentsModule(builder.Configuration)
-    .AddTranslationModule()
+    .AddTranslationModule(builder.Configuration)
     .AddSigningModule()
     .AddAnalysisModule()
     .AddAuditModule()
@@ -96,8 +98,8 @@ if (app.Environment.IsDevelopment())
     using var scope = app.Services.CreateScope();
     try
     {
-        await scope.ServiceProvider.GetRequiredService<LinguaSignDbContext>()
-            .Database.MigrateAsync();
+        await scope.ServiceProvider.GetRequiredService<LinguaSignDbContext>().Database.MigrateAsync();
+        await scope.ServiceProvider.GetRequiredService<TranslationDbContext>().Database.MigrateAsync();
     }
     catch (Exception ex)
     {
@@ -182,8 +184,39 @@ documents.MapGet("/{id:guid}/file", async (Guid id, IDocumentService svc, HttpCo
 })
 .WithName("GetDocumentFile");
 
+// --- Translation API ---
+documents.MapPost("/{id:guid}/translate", async (Guid id, TranslateRequest? req, ITranslationService svc, IBackgroundJobClient jobs, HttpContext ctx) =>
+{
+    var userId = GetUserId(ctx);
+    if (userId is null) return Results.Unauthorized();
+
+    var target = string.IsNullOrWhiteSpace(req?.TargetLanguage) ? "en" : req!.TargetLanguage!;
+    try
+    {
+        var summary = await svc.StartAsync(userId, id, target);
+        jobs.Enqueue<ITranslationProcessingService>(s => s.ProcessAsync(summary.Id, CancellationToken.None));
+        return Results.Accepted($"/api/documents/{id}/translation?target={target}", summary);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+})
+.WithName("StartTranslation");
+
+documents.MapGet("/{id:guid}/translation", async (Guid id, string? target, ITranslationService svc, HttpContext ctx) =>
+{
+    var userId = GetUserId(ctx);
+    if (userId is null) return Results.Unauthorized();
+    var detail = await svc.GetAsync(userId, id, string.IsNullOrWhiteSpace(target) ? "en" : target);
+    return detail is null ? Results.NotFound() : Results.Ok(detail);
+})
+.WithName("GetTranslation");
+
 app.Run();
 
 static string? GetUserId(HttpContext ctx)
     => ctx.User.FindFirst("sub")?.Value
        ?? ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+record TranslateRequest(string? TargetLanguage);

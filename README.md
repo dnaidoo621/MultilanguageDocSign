@@ -53,10 +53,10 @@ of what was translated and signed.
 - Authenticated app shell (Supabase) + modular backend (Phase 0).
 - 📄 **Document upload & OCR** — PDF upload, background OCR via the Surya sidecar, and a
   viewer that overlays extracted text blocks with bounding boxes on the original PDF (Phase 1).
+- 🌐 **Bilingual viewer** — clause-by-clause translation (local LLM via Ollama, glossary-injected)
+  with original + translation in synchronized panes and hover-linked clauses (Phase 2).
 
 **Planned (by phase):**
-- 🌐 **Bilingual viewer** — original and translation side-by-side, synchronized scrolling, clause
-  linking, and click-to-explain (Phase 2).
 - ✍️ **Digital signing** — legally-meaningful e-signatures via Documenso, with full metadata (Phase 3).
 - 🧾 **Audit trail & export** — append-only logs, signed PDF, bilingual review copy, audit package (Phase 3).
 - 🚩 **Risk detection & explanations** — flags auto-renewals, penalties, arbitration, etc., in plain language (Phase 4).
@@ -138,7 +138,7 @@ the option to split later — without paying the distributed-systems tax up fron
         ├── LinguaSign.Shared/      # Shared kernel — cross-cutting primitives & contracts
         └── Modules/
             ├── LinguaSign.Documents/    # Upload, storage, OCR, EF Core      (Phase 1) ✅
-            ├── LinguaSign.Translation/  # Segmentation, glossary, translate  (Phase 2)
+            ├── LinguaSign.Translation/  # Segmentation, glossary, translate  (Phase 2) ✅
             ├── LinguaSign.Signing/      # Documenso integration              (Phase 3)
             ├── LinguaSign.Analysis/     # Risk detection + explanations      (Phase 4)
             ├── LinguaSign.Audit/        # Append-only audit trail            (Phase 3)
@@ -284,8 +284,8 @@ connection can be overridden with the `LINGUASIGN_DB` environment variable.
 |-------|-------|--------|
 | 0 | Scaffold (auth, modular backend, app shell) | ✅ Done |
 | 1 | Upload → OCR → render extracted blocks | ✅ Done |
-| 2 | Bilingual viewer (translation + synced panes) — **validation milestone** | ⏭ Next |
-| 3 | Signing (Documenso) + audit trail + export | |
+| 2 | Bilingual viewer (translation + synced panes) — **validation milestone** | ✅ Done |
+| 3 | Signing (Documenso) + audit trail + export | ⏭ Next |
 | 4 | Risk detection + clause explanations | |
 
 **Future:** human-review/certified-translation tier, voice explanations, contract version comparison.

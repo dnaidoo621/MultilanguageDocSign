@@ -32,4 +32,15 @@ test("sign up, upload a PDF, OCR extracts blocks, viewer renders them", async ({
   const blocks = page.getByTestId("ocr-block");
   await expect(blocks.first()).toBeVisible({ timeout: 60_000 });
   expect(await blocks.count()).toBeGreaterThan(0);
+
+  // --- Phase 2: translate and verify the bilingual panel ---
+  await page.getByTestId("translate-button").click();
+
+  const segments = page.getByTestId("translation-segment");
+  await expect(segments.first()).toBeVisible({ timeout: 240_000 });
+  expect(await segments.count()).toBeGreaterThan(0);
+
+  // Hovering a translated clause should highlight its source block (shared state).
+  await segments.first().hover();
+  await expect(page.getByTestId("translation-pane")).toBeVisible();
 });

@@ -10,12 +10,19 @@ import type { DocumentDetail, PageDto } from "@/lib/types";
 // Load the pdf.js worker from a CDN matching the bundled version.
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const PAGE_WIDTH = 700; // rendered CSS width; OCR boxes scale to this.
-
-export default function PdfBlockViewer({ detail }: { detail: DocumentDetail }) {
+export default function PdfBlockViewer({
+  detail,
+  pageWidth = 700,
+  activeBlock,
+  onHover,
+}: {
+  detail: DocumentDetail;
+  pageWidth?: number;
+  activeBlock: string | null;
+  onHover: (id: string | null) => void;
+}) {
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeBlock, setActiveBlock] = useState<string | null>(null);
 
   useEffect(() => {
     let revoked: string | null = null;
@@ -46,8 +53,9 @@ export default function PdfBlockViewer({ detail }: { detail: DocumentDetail }) {
         <PageWithBlocks
           key={page.number}
           page={page}
+          pageWidth={pageWidth}
           activeBlock={activeBlock}
-          onHover={setActiveBlock}
+          onHover={onHover}
         />
       ))}
     </Document>
@@ -56,22 +64,24 @@ export default function PdfBlockViewer({ detail }: { detail: DocumentDetail }) {
 
 function PageWithBlocks({
   page,
+  pageWidth,
   activeBlock,
   onHover,
 }: {
   page: PageDto;
+  pageWidth: number;
   activeBlock: string | null;
   onHover: (id: string | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   // OCR boxes are in source pixels (page.width). Scale them to the rendered width.
-  const scale = page.width > 0 ? PAGE_WIDTH / page.width : 1;
+  const scale = page.width > 0 ? pageWidth / page.width : 1;
 
   return (
     <div ref={containerRef} className="relative mx-auto mb-6 w-fit shadow">
       <Page
         pageNumber={page.number}
-        width={PAGE_WIDTH}
+        width={pageWidth}
         renderAnnotationLayer={false}
         renderTextLayer={false}
       />

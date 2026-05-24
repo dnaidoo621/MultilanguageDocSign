@@ -36,3 +36,22 @@ export interface DocumentDetail {
   createdAt: string;
   pages: PageDto[];
 }
+
+export interface TranslationSegmentDto {
+  sourceBlockId: string;
+  pageNumber: number;
+  order: number;
+  sourceText: string;
+  translatedText: string;
+}
+
+export interface TranslationDetail {
+  id: string;
+  documentId: string;
+  targetLanguage: string;
+  sourceLanguage: string | null;
+  status: string;
+  model: string | null;
+  error: string | null;
+  segments: TranslationSegmentDto[];
+}

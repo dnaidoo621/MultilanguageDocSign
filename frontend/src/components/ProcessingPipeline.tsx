@@ -102,7 +102,7 @@ export default function ProcessingPipeline({
               Upload another
             </button>
             {!error && (
-              <button className="cta stamp" onClick={onOpen}>
+              <button className="cta stamp" data-testid="open-reader" onClick={onOpen}>
                 Open reader <span className="arrow">→</span>
               </button>
             )}

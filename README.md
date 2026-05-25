@@ -283,6 +283,30 @@ dotnet ef migrations add <Name> \
 Migrations apply automatically on backend startup in development. The design-time
 connection can be overridden with the `LINGUASIGN_DB` environment variable.
 
+### Tests
+
+```bash
+# Backend — xUnit unit + EF integration tests
+cd backend
+dotnet test                          # unit tests run offline; integration tests
+                                     # need local Postgres (docker compose up -d)
+
+# Frontend — Playwright
+cd frontend
+npx playwright test upload.spec.ts   # full happy-path pipeline (needs all services up)
+npx playwright test negative.spec.ts # fast negative/edge cases
+```
+
+**Backend tests** (`backend/tests/LinguaSign.Tests`): unit tests cover the deterministic
+risk rules, the legal glossary, and the LLM JSON parsers (incl. malformed / smaller-model
+shapes); integration tests spin up an ephemeral Postgres database and exercise the
+document, translation, audit, analysis, and processing services with mocked OCR/LLM —
+including ownership checks and the hybrid rules-override-LLM risk merge.
+
+**Frontend tests** (`frontend/e2e`): `upload.spec.ts` drives the whole pipeline end to end;
+`negative.spec.ts` covers auth gating, wrong credentials, non-PDF rejection, and theme
+persistence.
+
 ## Roadmap
 
 | Phase | Focus | Status |

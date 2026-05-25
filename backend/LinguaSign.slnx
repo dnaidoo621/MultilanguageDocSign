@@ -11,4 +11,7 @@
     <Project Path="src/Modules/LinguaSign.Signing/LinguaSign.Signing.csproj" />
     <Project Path="src/Modules/LinguaSign.Translation/LinguaSign.Translation.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LinguaSign.Tests/LinguaSign.Tests.csproj" />
+  </Folder>
 </Solution>

@@ -1,351 +1,125 @@
 # LinguaSign
 
-**Understand and confidently sign multilingual documents.** Upload a document, review a
-synchronized translation with risk highlights, then sign — with a full audit trail.
+Read a contract written in a language you don't speak — clause by clause, with the risky bits
+flagged in plain English — and sign it with a record of everything that happened. Built for the
+person standing in a foreign rental office holding a lease they can't read.
 
-> ⚠️ **LinguaSign is an AI-assisted document _comprehension_ tool.** It is **not** certified
-> legal translation, and it does **not** provide legal advice. AI translations may contain
-> inaccuracies — always consult a qualified professional for legal matters.
+> LinguaSign helps you *understand* a document. It is not a certified translation and it is not
+> legal advice. AI output can be wrong; for anything that matters, talk to a qualified
+> professional.
 
----
+![Landing](docs/screenshots/01-landing-light.png)
 
-## Table of Contents
+## The problem it's actually solving
 
-- [The Problem](#the-problem)
-- [Who It's For](#who-its-for)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Getting Started](#getting-started)
-- [Configuration](#configuration)
-- [API Reference](#api-reference)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [Cost Model](#cost-model)
-- [Design Principles](#design-principles)
-- [Contributing](#contributing)
+An English speaker in Seoul gets handed a `전세` lease. A new hire signs a Korean employment
+contract on day one. The usual options are bad: screenshot it into a translator and lose all
+the structure, ask a friend, or just sign and hope. LinguaSign takes the PDF and gives back the
+original and a translation side by side, every clause linked to its source, with auto-renewals,
+penalties, arbitration and the like called out — then lets you sign and walk away with a sealed
+audit package.
 
----
+The bilingual reader is the heart of it. Hover any clause and its counterpart lights up on the
+other side; a line is drawn between them so you can see exactly which source text produced which
+translation. Nothing is paraphrased away.
 
-## The Problem
+![Bilingual reader](docs/screenshots/06-reader-mirrored.png)
 
-People routinely sign documents in languages they don't fully understand — employment
-contracts, leases, banking forms, visa paperwork. The current "process" is screenshots into
-translators, asking friends, or simply blind-signing. There's no legal context, no risk
-awareness, and no bilingual traceability.
+## How it works
 
-LinguaSign turns a foreign-language document into something you can **read, understand, and
-sign with confidence** — while always preserving the original wording and a verifiable trail
-of what was translated and signed.
+Upload a PDF and a short pipeline runs: OCR (Surya) pulls text and bounding boxes, the document
+is segmented into clauses, each page is translated by a local LLM with a legal glossary injected,
+and a hybrid risk pass (deterministic rules + the model) flags dangerous clauses. You watch it
+happen and then open the reader.
 
-## Who It's For
+![Processing pipeline](docs/screenshots/05-pipeline-done.png)
 
-- **Expats** (e.g. English speakers in Korea) receiving contracts, leases, and visa documents.
-- **Multilingual citizens** (e.g. South Africa: Afrikaans, isiZulu, isiXhosa, Sesotho) who want
-  documents in their preferred language.
-- **Cross-border onboarding** — international employment contracts, NDAs, relocation paperwork.
+A few decisions that matter:
 
-## Features
+- **Everything runs locally by default.** OCR is a self-hosted Python service; translation and
+  risk analysis go through [Ollama](https://ollama.com). No document content leaves the machine,
+  which is the whole point for sensitive paperwork. Swapping to a GPU host you control is a config
+  change, not a rewrite — see [docs/DEPLOY.md](docs/DEPLOY.md).
+- **Translation is per-page, never the whole document in one prompt.** Tighter context, and the
+  first page is readable while the rest is still working.
+- **Risk detection is hybrid and the rules win ties.** Missing a high-risk clause is the worst
+  failure mode for this kind of tool, so keyword rules act as a floor the model can't undershoot.
 
-**Available:**
-- Authenticated app shell (Supabase) + modular backend (Phase 0).
-- 📄 **Document upload & OCR** — PDF upload, background OCR via the Surya sidecar, and a
-  viewer that overlays extracted text blocks with bounding boxes on the original PDF (Phase 1).
-- 🌐 **Bilingual viewer** — clause-by-clause translation (local LLM via Ollama, glossary-injected)
-  with original + translation in synchronized panes and hover-linked clauses (Phase 2).
-- ✍️ **Signing, audit & export** — in-app electronic signature stamped onto the PDF with
-  evidentiary metadata (hash, timestamp, IP), an append-only audit trail, and an export of the
-  signed PDF + audit package ZIP (Phase 3).
-- 🚩 **Risk detection & explanations** — hybrid (deterministic rules + LLM) clause risk
-  classification (auto-renewal, penalty, arbitration, non-compete, etc.) with plain-language
-  explanations, a risk overlay on the viewer, and a high-risk summary (Phase 4).
+For the full picture — system diagram, processing sequence, data model, deployment topology —
+see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Planned / post-validation:**
-- 🔐 Documenso / AES-QES signing, certified human-review translation tier, voice explanations,
-  contract version comparison.
+When you're done reviewing, you sign (a visible stamp is written onto the PDF with a hash,
+timestamp and IP), and every action lands in an append-only audit ledger you can export as a ZIP.
 
-## Architecture
+![Signing and audit ledger](docs/screenshots/09-signing.png)
 
-A **modular monolith** backend (.NET 10) and a **Next.js** frontend, with **Supabase**
-providing authentication, Postgres, and storage. Asynchronous document processing runs through
-an in-process job queue (Hangfire, added in Phase 1). A Python ML sidecar (OCR) and Documenso
-(signing) are introduced in later phases.
+## Stack
 
-```
-                 ┌─────────────────────────┐
-                 │   Next.js frontend       │
-                 │   (Supabase auth, PDF UI)│
-                 └────────────┬────────────┘
-                              │ HTTPS + JWT
-                 ┌────────────▼────────────┐
-                 │   .NET 10 API (host)     │
-                 │   composition root       │
-                 │  ┌────────────────────┐  │
-                 │  │ Documents          │  │
-                 │  │ Translation        │  │   modular monolith:
-                 │  │ Signing            │  │   one deployable,
-                 │  │ Analysis           │  │   clear module boundaries
-                 │  │ Audit              │  │
-                 │  │ Export             │  │
-                 │  └────────────────────┘  │
-                 └───┬─────────┬─────────┬──┘
-                     │         │         │
-        ┌────────────▼──┐ ┌────▼─────┐ ┌─▼──────────────┐
-        │ Supabase      │ │ Python   │ │ Documenso      │
-        │ auth/db/store │ │ ML (OCR) │ │ (e-signatures) │
-        └───────────────┘ └────┬─────┘ └────────────────┘
-                               │
-                     ┌─────────▼──────────┐
-                     │ LLM (Ollama local  │
-                     │ or cloud API)      │
-                     └────────────────────┘
-```
+- **Front end** — Next.js 16 / React 19, App Router, TypeScript. Light/dark theme.
+- **Backend** — ASP.NET Core on .NET 10, a modular monolith (Documents, Translation, Analysis,
+  Signing, Audit, Export), Hangfire for the background pipeline.
+- **Data / auth** — Supabase (Postgres + auth + storage). Five Postgres schemas, one per module.
+- **OCR** — Surya, in a FastAPI sidecar.
+- **LLM** — Ollama, `qwen2.5:7b` by default (`qwen2.5:3b` is an opt-in faster, lower-quality mode).
+- **PDF** — PdfSharp for the signature stamp (MIT-licensed; deliberately not iText).
 
-**Why a modular monolith (not microservices)?** For a small team and validation-stage product,
-microservices add operational cost (service discovery, inter-service auth, distributed tracing,
-multiple deployments) without buying anything we need yet. Modules give us clean boundaries and
-the option to split later — without paying the distributed-systems tax up front.
+## Quick start (local)
 
-## Tech Stack
-
-| Layer | Choice | Notes |
-|-------|--------|-------|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind | App Router, `src/` dir |
-| Backend | ASP.NET Core on .NET 10 | Modular monolith, minimal APIs |
-| Auth | Supabase Auth (JWT) | Backend validates Supabase-issued JWTs |
-| Database | Supabase Postgres | Row-level security for multi-tenancy |
-| Storage | Supabase Storage | Original PDFs, renders, signature assets |
-| Async jobs | Hangfire (Phase 1) | Postgres-backed; OCR → translate → analyze pipeline |
-| OCR | Surya / PaddleOCR (self-host) or Azure Document Intelligence | Python ML sidecar |
-| Translation / Analysis | Ollama (local) or cloud LLM | Clause-by-clause, glossary-injected |
-| Signing | In-app electronic signature (MVP) | PdfSharp stamp + audit trail; Documenso/AES is a post-validation upgrade |
-| PDF stamping | PdfSharp | Avoids iText (AGPL) |
-
-## Project Structure
-
-```
-.
-├── README.md
-├── docker-compose.yml              # local Postgres (+ optional OCR sidecar)
-├── frontend/                       # Next.js app
-│   └── src/
-│       ├── app/                    # routes: / , /dashboard , /documents/[id]
-│       ├── components/             # AuthForm, UploadDropzone, DocumentList, PdfBlockViewer
-│       └── lib/                    # api client, types, useUser, supabase clients
-├── ml/
-│   └── ocr-sidecar/                # FastAPI + Surya OCR service (main.py, Dockerfile)
-└── backend/
-    ├── LinguaSign.slnx             # .NET 10 solution (new .slnx format)
-    └── src/
-        ├── LinguaSign.Api/         # Host: composition root, JWT auth, endpoints, Hangfire
-        ├── LinguaSign.Shared/      # Shared kernel — cross-cutting primitives & contracts
-        └── Modules/
-            ├── LinguaSign.Documents/    # Upload, storage, OCR, EF Core      (Phase 1) ✅
-            ├── LinguaSign.Translation/  # Segmentation, glossary, translate  (Phase 2) ✅
-            ├── LinguaSign.Signing/      # E-signature + PDF stamp (PdfSharp)  (Phase 3) ✅
-            ├── LinguaSign.Analysis/     # Risk detection + explanations      (Phase 4) ✅
-            ├── LinguaSign.Audit/        # Append-only audit trail            (Phase 3) ✅
-            └── LinguaSign.Export/       # Signed PDF + audit package ZIP     (Phase 3) ✅
-```
-
-Each module exposes an `Add<Module>Module()` extension that registers its own services with DI,
-keeping module internals encapsulated behind a single composition seam in `Program.cs`.
-
-## Prerequisites
-
-| Tool | Version | Required for |
-|------|---------|--------------|
-| .NET SDK | 10.x | Backend |
-| Node.js | 22+ | Frontend |
-| npm | 11+ | Frontend |
-| Supabase project | free tier | Auth, DB, storage |
-| Docker (Rancher Desktop) | — | OCR sidecar & Documenso (Phase 1+) |
-| Ollama | — | Local LLM translation (optional, Phase 2) |
-
-> **macOS note:** if `dotnet` isn't found, the SDK is at `/usr/local/share/dotnet` — add it to
-> your PATH (`export PATH="/usr/local/share/dotnet:$PATH"`).
-
-## Getting Started
-
-### 1. Create a Supabase project
-
-Sign up at [supabase.com](https://supabase.com), create a project, then grab the **Project URL**
-and **anon public key** from **Project Settings → API**.
-
-### 2. Start local dependencies
+You'll need the .NET 10 SDK, Node 22+, Docker, Python 3.12, Ollama, and a free Supabase project.
 
 ```bash
-docker compose up -d            # Postgres on :5432
+docker compose up -d                              # Postgres
+
+cd ml/ocr-sidecar && python3.12 -m venv .venv && source .venv/bin/activate \
+  && pip install -r requirements.txt && uvicorn main:app --port 8000   # OCR (downloads weights once)
+
+ollama pull qwen2.5:7b                            # the model
+
+cd backend && dotnet run --project src/LinguaSign.Api --launch-profile http   # API on :5080
+
+cd frontend && cp .env.example .env.local && npm install && npm run dev        # web on :3000
 ```
 
-### 3. OCR sidecar
+Put your Supabase URL + anon key in `frontend/.env.local`, and the URL in the backend's
+user-secrets (`dotnet user-secrets set "Supabase:Url" ...`). Turn off email confirmation in
+Supabase for local dev. Full instructions, plus **cloud** and **Kubernetes** deployments, are in
+[docs/DEPLOY.md](docs/DEPLOY.md).
+
+## Tests
 
 ```bash
-cd ml/ocr-sidecar
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000   # first run downloads Surya weights
+cd backend && dotnet test            # xUnit: unit + EF integration (integration needs Postgres up)
+cd frontend && npx playwright test   # e2e: landing, auth, dashboard, full pipeline, negatives
 ```
 
-### 4. Backend
+The backend suite (47 tests) covers the risk rules, the legal glossary, and the LLM JSON parsers
+(including malformed responses and the smaller-model output shape that once crashed a job), plus
+EF-backed service tests against an ephemeral Postgres database — ownership checks, the
+not-yet-extracted negative paths, OCR-failure handling, and the rules-override-LLM risk merge.
 
-```bash
-cd backend
+The Playwright suite covers each screen positively and negatively (auth gating, wrong
+credentials, non-PDF rejection, theme persistence) and runs the whole upload → translate →
+analyze → sign → export flow end to end. The screenshots in this README are produced by
+`CAPTURE=1 npx playwright test screenshots.spec.ts`.
 
-# Store secrets outside source control (preferred):
-dotnet user-secrets init --project src/LinguaSign.Api
-dotnet user-secrets set "Supabase:Url" "https://<your-project>.supabase.co" --project src/LinguaSign.Api
+## Layout
 
-dotnet run --project src/LinguaSign.Api   # applies EF migrations on startup (dev)
+```
+backend/        .NET 10 modular monolith (+ Dockerfile, tests/)
+frontend/       Next.js app (+ Dockerfile, e2e/ Playwright)
+ml/ocr-sidecar/ FastAPI + Surya OCR service
+deploy/k8s/     Kubernetes manifests
+docs/           ARCHITECTURE.md, DEPLOY.md, screenshots/
+docker-compose.yml
 ```
 
-Verify it's up:
+## Status
 
-```bash
-curl http://localhost:5080/health
-# → {"status":"ok","service":"LinguaSign.Api"}
-```
+All four MVP phases plus a full UI pass are done and verified end to end: upload → OCR →
+bilingual translation → risk analysis → e-signature → audit export. It's a working, demoable
+product, not a prototype.
 
-The default `ConnectionStrings:Postgres` and `Ocr:BaseUrl` already point at the compose
-Postgres and the local sidecar. The Hangfire dashboard is at `/hangfire` (dev).
-
-### 5. Frontend
-
-```bash
-cd frontend
-cp .env.example .env.local      # fill in your Supabase URL + anon key
-npm install
-npm run dev                     # http://localhost:3000  → open /dashboard
-```
-
-**End-to-end:** sign in on `/dashboard`, upload a PDF, watch its status move
-`Uploaded → Processing → Extracted`, then open it to see extracted blocks overlaid on the PDF.
-
-## Configuration
-
-### Backend (`appsettings.json`, user-secrets, or environment variables)
-
-| Key | Description |
-|-----|-------------|
-| `Supabase:Url` | Your Supabase project URL (used to derive JWT issuer/JWKS) |
-| `Supabase:JwtSecret` | Only needed for legacy HS256 projects |
-
-Environment variable form uses `__` as the separator, e.g. `Supabase__Url`.
-
-### Frontend (`.env.local`)
-
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon public key |
-| `NEXT_PUBLIC_API_BASE_URL` | LinguaSign backend base URL (default `http://localhost:5080`) |
-
-## API Reference
-
-| Method | Route | Auth | Description |
-|--------|-------|------|-------------|
-| `GET` | `/health` | none | Liveness probe |
-| `GET` | `/me` | required | Returns the authenticated user's `sub` and `email` claims |
-| `POST` | `/api/documents` | required | Upload a PDF (multipart, field `file`); enqueues OCR |
-| `GET` | `/api/documents` | required | List the caller's documents |
-| `GET` | `/api/documents/{id}` | required | Document detail incl. pages + extracted blocks |
-| `GET` | `/api/documents/{id}/file` | required | Download the original PDF |
-| `GET` | `/openapi/v1.json` | none (dev) | OpenAPI document |
-
-All `/api/documents` routes are scoped to the authenticated user.
-
-## Development
-
-```bash
-# Backend
-cd backend
-dotnet build LinguaSign.slnx      # build all projects
-dotnet run --project src/LinguaSign.Api
-
-# Frontend
-cd frontend
-npm run dev                       # dev server
-npm run build                     # production build
-npm run lint                      # lint
-```
-
-### EF Core migrations
-
-```bash
-cd backend
-dotnet ef migrations add <Name> \
-  --project src/Modules/LinguaSign.Documents \
-  --startup-project src/Modules/LinguaSign.Documents
-```
-
-Migrations apply automatically on backend startup in development. The design-time
-connection can be overridden with the `LINGUASIGN_DB` environment variable.
-
-### Tests
-
-```bash
-# Backend — xUnit unit + EF integration tests
-cd backend
-dotnet test                          # unit tests run offline; integration tests
-                                     # need local Postgres (docker compose up -d)
-
-# Frontend — Playwright
-cd frontend
-npx playwright test upload.spec.ts   # full happy-path pipeline (needs all services up)
-npx playwright test negative.spec.ts # fast negative/edge cases
-```
-
-**Backend tests** (`backend/tests/LinguaSign.Tests`): unit tests cover the deterministic
-risk rules, the legal glossary, and the LLM JSON parsers (incl. malformed / smaller-model
-shapes); integration tests spin up an ephemeral Postgres database and exercise the
-document, translation, audit, analysis, and processing services with mocked OCR/LLM —
-including ownership checks and the hybrid rules-override-LLM risk merge.
-
-**Frontend tests** (`frontend/e2e`): `upload.spec.ts` drives the whole pipeline end to end;
-`negative.spec.ts` covers auth gating, wrong credentials, non-PDF rejection, and theme
-persistence.
-
-## Roadmap
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| 0 | Scaffold (auth, modular backend, app shell) | ✅ Done |
-| 1 | Upload → OCR → render extracted blocks | ✅ Done |
-| 2 | Bilingual viewer (translation + synced panes) — **validation milestone** | ✅ Done |
-| 3 | Signing + audit trail + export | ✅ Done |
-| 4 | Risk detection + clause explanations | ✅ Done |
-
-All four MVP phases are complete and verified end-to-end (Playwright).
-
-**Future:** Documenso/AES-QES signing, human-review/certified-translation tier, voice explanations, contract version comparison.
-
-## Cost Model
-
-Designed to validate cheaply. During the validation phase (low volume), expect roughly:
-
-- **Fixed:** ~$0–135/mo depending on whether you self-host (Rancher/Ollama on your own machine) or
-  use managed cloud. With local OCR + local LLM via Ollama, fixed cost is essentially electricity.
-- **Per document:** ~$0.30–0.85 if using cloud OCR + cloud LLM; **~$0** with the local Ollama path.
-
-A one-time GPU investment becomes worthwhile only after volume justifies it — deliberately deferred.
-
-## Design Principles
-
-1. **Always preserve the original.** Original wording, clause linkage, and translation
-   traceability are never lost. The original legal document is never blindly replaced.
-2. **Trust through traceability.** Every action (upload, translate, sign, export) is logged with
-   hashes, timestamps, and the model/version used.
-3. **Honest positioning.** Never claim legal equivalence, certified translation, or legal advice.
-4. **Comprehension is the moat** — not signatures, PDFs, or OCR. Build depth there.
-
-## Contributing
-
-- Commits are plain and descriptive — .
-- Keep module boundaries intact: cross-module access goes through public contracts, not internals.
-- Secrets never get committed (`.env`, `appsettings.Development.json`, and user-secrets are git-ignored).
-
----
+Known next steps: source-language auto-detection in the OCR sidecar, hand-drawn signature images,
+a layout-matched bilingual PDF export, and — for legally-weightier signatures — Documenso / AES.
 
 _License: TBD._

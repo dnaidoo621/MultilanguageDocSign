@@ -99,10 +99,10 @@ builder.Services
 
 var app = builder.Build();
 
-// Apply EF Core migrations on startup in development for convenience.
-if (app.Environment.IsDevelopment())
+// Apply EF Core migrations on startup (all environments). For a single API replica this is
+// the simplest path; scale-out deployments should run migrations as a separate job instead.
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
     try
     {
         await scope.ServiceProvider.GetRequiredService<LinguaSignDbContext>().Database.MigrateAsync();
@@ -113,9 +113,13 @@ if (app.Environment.IsDevelopment())
     }
     catch (Exception ex)
     {
-        app.Logger.LogWarning(ex, "Database migration on startup failed — is Postgres running?");
+        app.Logger.LogWarning(ex, "Database migration on startup failed — is Postgres reachable?");
     }
+}
 
+// Dev-only surfaces: OpenAPI document + Hangfire dashboard.
+if (app.Environment.IsDevelopment())
+{
     app.MapOpenApi();
     app.UseHangfireDashboard("/hangfire");
 }

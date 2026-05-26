@@ -41,6 +41,11 @@ GLOSSARY_KO_EN: dict[str, str] = {
     "이용정지": "suspension",
     "갑": "Party A",
     "을": "Party B",
+    "임차인": "tenant",
+    "임대인": "landlord",
+    "근로계약": "employment contract",
+    "손해배상": "damages",
+    "지식재산권": "intellectual property rights",
 }
 
 # Register all language-pair glossaries here.
@@ -129,18 +134,41 @@ _SUBSTITUTIONS: dict[str, list[tuple[str, str]]] = {
         ("usage stop", "suspension"),
         ("usage ban", "suspension"),
         ("service ban", "suspension"),
-        # 위약금 (penalty) — often rendered as "counterfeit", "breach money", "default money"
+        # 위약금 (penalty) — often rendered as "counterfeit", "breach money", "default money",
+        # or completely wrong as "dividends", "premium"
         ("counterfeit payment", "penalty"),
         ("counterfeit", "penalty"),
         ("breach money", "penalty"),
         ("default money", "penalty"),
         ("penalty clause", "penalty"),
         ("liquidated damages", "penalty"),
+        ("dividends", "penalty"),
+        ("divides", "penalty"),
+        ("premium", "penalty"),
         # 자동갱신 (automatic renewal) — also "automatically updated", "auto-extend"
         ("auto renewal", "automatic renewal"),
         ("auto-renewal", "automatic renewal"),
         ("automatically updated", "automatically renewed"),
         ("auto-extend", "automatic renewal"),
+        # 임차인 (tenant) — often "occupant", "lessee", "the donor" (model error)
+        ("lessee", "tenant"),
+        ("occupant", "tenant"),
+        ("the donor", "tenant"),
+        ("donor", "tenant"),
+        # 임대인 (landlord) — often "lessor", "rental provider", "leaser"
+        ("lessor", "landlord"),
+        ("leaser", "landlord"),
+        ("rental provider", "landlord"),
+        # 근로계약 (employment contract) — often "labor contract", "work contract"
+        ("labor contract", "employment contract"),
+        ("work contract", "employment contract"),
+        ("labour contract", "employment contract"),
+        # 손해배상 (damages) — often "damage compensation", "injury compensation"
+        ("damage compensation", "damages"),
+        ("injury compensation", "damages"),
+        ("compensation for damages", "damages"),
+        # 지식재산권 (intellectual property rights) — often "intellectual property right" (singular)
+        ("intellectual property right", "intellectual property rights"),
     ],
 }
 

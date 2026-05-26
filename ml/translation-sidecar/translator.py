@@ -15,7 +15,7 @@ from pathlib import Path
 import ctranslate2
 import sentencepiece as spm
 
-from glossary import post_process
+from glossary import get_target_prefix_tokens, post_process
 
 MODELS_DIR = Path(__file__).parent / "models"
 
@@ -83,6 +83,21 @@ class TranslatorPool:
             sp_src.encode_as_pieces(t) for t in texts
         ]
 
+        # Build per-sentence target_prefix lists for block-opening glossary terms.
+        # get_target_prefix_tokens returns [] when no constraint applies; CTranslate2
+        # treats an empty list (or None entry) as "no constraint".
+        target_prefixes: list[list[str] | None] = [
+            (get_target_prefix_tokens(t, src, tgt, sp_tgt) or None)
+            for t in texts
+        ]
+        # Only pass target_prefix if at least one sentence has a prefix constraint.
+        tp_kwarg: dict = {}
+        if any(p is not None for p in target_prefixes):
+            # CTranslate2 requires the list to be the same length as the input batch.
+            tp_kwarg["target_prefix"] = [
+                p if p is not None else [] for p in target_prefixes
+            ]
+
         results = translator.translate_batch(
             tokenized,
             beam_size=4,
@@ -94,6 +109,7 @@ class TranslatorPool:
             repetition_penalty=1.3,
             replace_unknowns=True,
             max_batch_size=32,
+            **tp_kwarg,
         )
 
         translated: list[str] = []

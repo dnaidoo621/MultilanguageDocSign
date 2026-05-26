@@ -2,33 +2,47 @@
 
 Three paths, smallest to largest: a laptop for development, a single VM for a hosted demo, and
 Kubernetes for something closer to production. The application code is identical in all three —
-what changes is where Postgres, the OCR sidecar, and Ollama live, and a handful of connection
-strings.
+what changes is where Postgres, the OCR sidecar, the translation sidecar, and Ollama live, and a
+handful of connection strings.
 
-A note that runs through all of this: **the LLM is the bottleneck, not the app.** On a
-16 GB machine, OCR (Surya) and the model (Ollama) fight over memory and translation crawls.
-Anywhere you can give Ollama a real GPU — a cloud GPU node you control, a workstation — the whole
-thing gets several times faster *without touching the code*, just by pointing `Llm__BaseUrl` at
-that host. That keeps documents on infrastructure you own, which is the point.
+A few notes that run through all of this:
+
+- **Translation is now a dedicated sidecar.** MarianMT via CTranslate2 INT8 — 78 MB model,
+  ~500 MB RAM, 2 s startup — replaces qwen2.5 for translation. Ollama is still required for
+  risk analysis. Set `Translation__Engine=ollama` to revert to the LLM translation path if
+  you prefer.
+- **Ollama is the risk bottleneck, not translation.** On a 16 GB machine, OCR (Surya) and the
+  risk model (Ollama) now have the translation budget freed up. Anywhere you can give Ollama a
+  real GPU — a cloud GPU node you control, a workstation — risk analysis gets several times
+  faster *without touching the code*, just by pointing `Llm__BaseUrl` at that host. Documents
+  stay on infrastructure you own.
 
 ---
 
 ## 1. Local (development)
 
-What you need: .NET 10 SDK, Node 22+, Docker (for Postgres), Python 3.12 (for the OCR sidecar),
+What you need: .NET 10 SDK, Node 22+, Docker (for Postgres), Python 3.12 (for both sidecars),
 Ollama, and a Supabase project for auth.
 
 ```bash
 # Postgres
 docker compose up -d
 
-# OCR sidecar (first run downloads Surya weights)
+# OCR sidecar (first run downloads Surya weights, a few GB)
 cd ml/ocr-sidecar
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --port 8000
 
-# Model
+# Translation sidecar — one-time model download + conversion (~300 MB → 78 MB INT8)
+cd ml/translation-sidecar
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pip install "transformers>=4.40,<5" huggingface_hub torch --extra-index-url https://download.pytorch.org/whl/cpu
+python convert_model.py --pair ko-en     # one-time; re-run to add more language pairs
+uvicorn main:app --port 8001
+
+# Risk model (Ollama — translation no longer uses this)
 ollama pull qwen2.5:7b      # accurate; qwen2.5:3b is faster but lower quality
 
 # Backend  (stores Supabase config in user-secrets, never in git)
@@ -51,14 +65,16 @@ during development so sign-up logs you straight in.
 
 Good enough for putting the app in front of people. One box runs everything via containers.
 
-1. Provision a VM. For usable translation speed, pick one with a **GPU** (e.g. a 24 GB card) — a
-   7B model there runs at 100+ tok/s versus ~20 on a CPU/16 GB laptop.
-2. Build and run the three images plus Postgres and Ollama:
+1. Provision a VM. For fast risk analysis, pick one with a **GPU** (e.g. a 24 GB card) — a 7B
+   model there runs at 100+ tok/s versus ~20 on a CPU/16 GB laptop. Translation is now a
+   lightweight sidecar (~500 MB) so a GPU is no longer required for that path.
+2. Build and run the four images plus Postgres and Ollama:
 
 ```bash
-docker build -t linguasign/api  backend/
-docker build -t linguasign/ocr  ml/ocr-sidecar/
-docker build -t linguasign/web  frontend/ \
+docker build -t linguasign/api         backend/
+docker build -t linguasign/ocr         ml/ocr-sidecar/
+docker build -t linguasign/translation ml/translation-sidecar/   # bakes model at build time
+docker build -t linguasign/web         frontend/ \
   --build-arg NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co \
   --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY \
   --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.yourdomain.com
@@ -66,8 +82,8 @@ docker build -t linguasign/web  frontend/ \
 
 3. Run them (Postgres + Ollama as containers, or managed Postgres + a GPU Ollama host). Wire the
    API with environment variables: `ConnectionStrings__Postgres`, `Supabase__Url`,
-   `Ocr__BaseUrl`, `Llm__BaseUrl`, `Cors__Origins` (your front-end origin), and a persistent
-   `Storage__LocalRoot`.
+   `Ocr__BaseUrl`, `Translation__SidecarUrl` (default `http://translation:8001`),
+   `Llm__BaseUrl`, `Cors__Origins` (your front-end origin), and a persistent `Storage__LocalRoot`.
 4. Put a reverse proxy (Caddy/Nginx) with TLS in front of the web (`:3000`) and API (`:8080`).
 5. `ollama pull qwen2.5:7b` on the Ollama host.
 
@@ -84,9 +100,10 @@ Postgres StatefulSet, Ollama and OCR deployments, the API and web deployments, a
 
 ```bash
 # 1. Build + push images to your registry, then update image: refs in the manifests.
-docker build -t REGISTRY/linguasign-api backend/   && docker push REGISTRY/linguasign-api
-docker build -t REGISTRY/linguasign-ocr ml/ocr-sidecar/ && docker push REGISTRY/linguasign-ocr
-docker build -t REGISTRY/linguasign-web frontend/  \
+docker build -t REGISTRY/linguasign-api         backend/   && docker push REGISTRY/linguasign-api
+docker build -t REGISTRY/linguasign-ocr         ml/ocr-sidecar/ && docker push REGISTRY/linguasign-ocr
+docker build -t REGISTRY/linguasign-translation ml/translation-sidecar/ && docker push REGISTRY/linguasign-translation
+docker build -t REGISTRY/linguasign-web         frontend/  \
   --build-arg NEXT_PUBLIC_SUPABASE_URL=... \
   --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
   --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.yourdomain.com
@@ -122,8 +139,10 @@ Things worth knowing:
 | `ConnectionStrings__Postgres` | `Host=postgres;...` | EF Core + Hangfire |
 | `Supabase__Url` | `https://x.supabase.co` | Derives the JWKS / issuer |
 | `Supabase__JwtSecret` | *(empty)* | Only for legacy HS256 projects |
-| `Ocr__BaseUrl` | `http://ocr:8000` | Surya sidecar |
-| `Llm__BaseUrl` | `http://ollama:11434/v1` | OpenAI-compatible endpoint |
+| `Ocr__BaseUrl` | `http://ocr:8000` | Surya OCR sidecar |
+| `Translation__Engine` | `marian` | `ollama` to revert to LLM translation |
+| `Translation__SidecarUrl` | `http://translation:8001` | MarianMT sidecar |
+| `Llm__BaseUrl` | `http://ollama:11434/v1` | OpenAI-compatible endpoint (risk analysis) |
 | `Llm__Model` | `qwen2.5:7b` | `qwen2.5:3b` = faster, lower quality |
 | `Storage__LocalRoot` | `/data/storage` | Document blob storage path |
 | `Cors__Origins` | `https://app.yourdomain.com` | Front-end origin(s), comma-separated |

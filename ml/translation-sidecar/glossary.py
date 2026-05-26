@@ -30,9 +30,15 @@ GLOSSARY_KO_EN: dict[str, str] = {
     "불가항력": "force majeure",
     "해지": "termination",
     "해지권": "right of termination",
+    # 취소 = annulment/cancellation (voids from inception); legally distinct from 해지 (prospective termination)
+    "취소": "cancellation",
+    "취소권": "right of cancellation",
     "보증금": "security deposit",
     "위약금": "penalty",
     "자동갱신": "automatic renewal",
+    "환불": "refund",
+    "책임": "liability",
+    "이용정지": "suspension",
     "갑": "Party A",
     "을": "Party B",
 }
@@ -64,13 +70,65 @@ _SUBSTITUTIONS: dict[str, list[tuple[str, str]]] = {
         ("arbitral", "arbitration"),
         # 면책 (indemnification)
         ("exemption from liability", "indemnification"),
+        ("liability exemption", "indemnification"),
         ("exemption", "indemnification"),
+        ("immunity", "indemnification"),
+        ("disclaimer", "indemnification"),
+        # 불가항력 (force majeure)
+        ("irresistible force", "force majeure"),
+        ("unavoidable force", "force majeure"),
+        ("acts of god", "force majeure"),
+        ("act of god", "force majeure"),
+        ("force of nature", "force majeure"),
+        ("unforeseeable circumstances", "force majeure"),
+        # 기밀유지 (confidentiality)
+        ("security maintenance", "confidentiality"),
+        ("confidentiality maintenance", "confidentiality"),
+        ("secrecy maintenance", "confidentiality"),
+        ("secret maintenance", "confidentiality"),
+        ("maintaining confidentiality", "confidentiality"),
+        # 갑 (Party A) — single-char term; all entries gated on 갑 appearing in source
+        ("first party", "Party A"),
+        ("class a", "Party A"),
+        ("Pack", "Party A"),
+        ("armor", "Party A"),
+        # 을 (Party B) — single-char term; all entries gated on 을 appearing in source
+        ("second party", "Party B"),
+        ("subordinate", "Party B"),
+        ("worker", "Party B"),
         # 해지 (termination)
         ("cancellation", "termination"),
         ("rescission", "termination"),
+        # 해지권 (right of termination) — more specific phrases must precede generic "termination" entries
+        ("right to terminate", "right of termination"),
+        ("right to cancel", "right of termination"),
+        ("right of cancellation", "right of termination"),
+        ("termination right", "right of termination"),
         # 보증금 (security deposit)
         ("deposit money", "security deposit"),
         ("guarantee money", "security deposit"),
+        ("guarantee deposit", "security deposit"),
+        ("bail", "security deposit"),
+        # 취소 (cancellation / annulment) — opus-mt-ko-en often uses "abolition", "withdrawal", "revocation"
+        ("abolition", "cancellation"),
+        ("withdrawal", "cancellation"),
+        ("revocation", "cancellation"),
+        ("annulment", "cancellation"),
+        # 취소권 (right of cancellation)
+        ("right of revocation", "right of cancellation"),
+        ("right to revoke", "right of cancellation"),
+        ("right of withdrawal", "right of cancellation"),
+        # 환불 (refund) — often rendered as "reimbursement", "return payment", "repayment"
+        ("reimbursement", "refund"),
+        ("return payment", "refund"),
+        ("repayment", "refund"),
+        # 책임 (liability) — often rendered as "responsibility", "obligation" (legally imprecise)
+        ("responsibility", "liability"),
+        # 이용정지 (suspension) — often rendered as "use suspension", "usage stop", "usage ban"
+        ("use suspension", "suspension"),
+        ("usage stop", "suspension"),
+        ("usage ban", "suspension"),
+        ("service ban", "suspension"),
         # 위약금 (penalty) — often rendered as "counterfeit", "breach money", "default money"
         ("counterfeit payment", "penalty"),
         ("counterfeit", "penalty"),

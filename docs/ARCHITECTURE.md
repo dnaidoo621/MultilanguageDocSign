@@ -1,9 +1,9 @@
 # Architecture
 
-LinguaSign is a **modular monolith** on the backend with a separate Next.js front end and a
-small Python OCR sidecar. The whole thing is designed to run on one machine for validation and
-to be lifted onto a server (or Kubernetes) without code changes — the only things that move are
-connection strings and base URLs.
+LinguaSign is a **modular monolith** on the backend with a separate Next.js front end and two
+small Python sidecars — one for OCR, one for translation. The whole thing is designed to run on
+one machine for validation and to be lifted onto a server (or Kubernetes) without code changes —
+the only things that move are connection strings and base URLs.
 
 The deliberate non-goals are worth stating up front, because they shaped everything: no
 microservices, no message broker, no cloud lock-in. A solo project doesn't have the problems
@@ -35,8 +35,9 @@ flowchart TB
     end
 
     subgraph ml[Inference]
-        ocr[Surya OCR sidecar<br/>FastAPI · Python]
-        llm[Ollama<br/>qwen2.5]
+        ocr[Surya OCR sidecar<br/>FastAPI · Python · :8000]
+        trans[MarianMT translation sidecar<br/>FastAPI · CTranslate2 INT8 · :8001]
+        llm[Ollama<br/>qwen2.5 · :11434]
     end
 
     supa[Supabase Auth<br/>JWT / JWKS]
@@ -52,7 +53,7 @@ flowchart TB
     audit --> pg
     documents --> storage
     hangfire --> ocr
-    translation --> llm
+    translation --> trans
     analysis --> llm
 ```
 
@@ -78,6 +79,7 @@ sequenceDiagram
     participant A as .NET API
     participant H as Hangfire
     participant O as OCR sidecar
+    participant T as Translation sidecar
     participant L as Ollama
     participant DB as Postgres
 
@@ -93,8 +95,8 @@ sequenceDiagram
     U->>A: POST /{id}/translate
     A-->>H: enqueue translate
     loop per page
-        H->>L: chat/completions (clauses + glossary)
-        L-->>H: translations (JSON)
+        H->>T: POST /translate (blocks + source lang)
+        T-->>H: translations (GUID-keyed JSON, glossary applied)
         H->>DB: segments (committed per page)
     end
 
@@ -111,11 +113,15 @@ sequenceDiagram
     A-->>U: ZIP (signed PDF + metadata + audit)
 ```
 
-Two things in here are load-bearing:
+Three things in here are load-bearing:
 
-- **Translation and analysis run one page at a time, never the whole document in one prompt.**
-  Page-level prompts keep context tight and let segments stream into the reader as each page
-  finishes, so the first page is readable in seconds instead of after the whole document.
+- **Translation uses a purpose-built MT model, not a general LLM.** MarianMT
+  (`Helsinki-NLP/opus-mt-ko-en`) via CTranslate2 INT8 is 78 MB, uses ~500 MB RAM, and starts in
+  2 seconds. This frees the rest of system memory for OCR and risk analysis and makes the whole
+  stack viable on a 16 GB machine.
+- **Translation runs one page at a time, never the whole document in one call.** Page-level
+  batching lets segments stream into the reader as each page finishes, so the first page is
+  readable in seconds.
 - **Risk detection is hybrid.** Deterministic keyword rules run alongside the LLM and the higher
   risk wins. For a tool people use before signing, a missed high-risk clause is the worst
   outcome, so the rules act as a floor the model can't undershoot.
@@ -183,7 +189,8 @@ purpose — that's the price of keeping each module's schema independent.
 | Backend | .NET 10, modular monolith | One deployable, clean module seams |
 | Async | Hangfire (Postgres-backed) | The pipeline is a linear per-document job, not a stream |
 | OCR | Surya (self-hosted) | Strong layout + Korean; runs on the same box |
-| Translation / risk | Ollama (`qwen2.5:7b`) | Local, private, $0/doc; 3B is an opt-in fast mode |
+| Translation | MarianMT via CTranslate2 INT8 | 78 MB model, ~500 MB RAM, 2 s startup; purpose-built for translation, not a general LLM. Legal-term glossary applied post-decode. `Translation:Engine=ollama` reverts to qwen2.5 |
+| Risk analysis | Ollama (`qwen2.5:7b`) | Needs reasoning, not just translation; hybrid with deterministic keyword rules |
 | Auth/DB/storage | Supabase | One provider for auth + Postgres + storage |
 | PDF stamping | PdfSharp | MIT-licensed; avoids iText's AGPL |
 | Front end | Next.js 16 / React 19 | App Router, server components where useful |
@@ -199,6 +206,7 @@ flowchart TB
         websvc[web · Next.js<br/>Deployment + Service]
         apisvc[api · .NET<br/>Deployment + Service]
         ocrsvc[ocr · Surya<br/>Deployment + Service]
+        transsvc[translation · MarianMT<br/>Deployment + Service + PVC]
         ollamasvc[ollama<br/>Deployment + Service + PVC]
         pgsvc[(postgres<br/>StatefulSet + PVC)]
         secret[/Secret: Supabase + DB/]
@@ -207,6 +215,7 @@ flowchart TB
     ingress --> apisvc
     apisvc --> pgsvc
     apisvc --> ocrsvc
+    apisvc --> transsvc
     apisvc --> ollamasvc
     apisvc -. reads .-> secret
 ```

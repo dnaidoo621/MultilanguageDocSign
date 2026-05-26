@@ -1,8 +1,11 @@
 # Local development dependencies.
-#   docker compose up -d                 # Postgres only
-#   docker compose --profile ocr up      # also build/run the Surya OCR sidecar (CPU-only)
+#   docker compose up -d                          # Postgres only (default)
+#   docker compose --profile ocr up               # also build/run the Surya OCR sidecar (CPU-only)
+#   docker compose --profile translation up       # also build/run the MarianMT translation sidecar
+#   docker compose --profile ocr --profile translation up   # both sidecars
 #
-# On Apple Silicon the OCR sidecar is faster run natively (MPS) — see ml/ocr-sidecar/README.md.
+# On Apple Silicon both sidecars are faster run natively in a venv (MPS / Apple Accelerate).
+# See ml/ocr-sidecar/README.md and ml/translation-sidecar for native setup instructions.
 services:
   postgres:
     image: postgres:16-alpine
@@ -20,6 +23,14 @@ services:
     ports:
       - "8000:8000"
     profiles: ["ocr"]
+
+  translation-sidecar:
+    build: ./ml/translation-sidecar
+    ports:
+      - "8001:8001"
+    environment:
+      - TRANSLATION_PRELOAD=ko-en
+    profiles: ["translation"]
 
 volumes:
   pgdata:

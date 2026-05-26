@@ -32,6 +32,10 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
+            - name: Translation__Engine
+              value: "marian"
+            - name: Translation__SidecarUrl
+              value: "http://translation:8001"
             - name: Ocr__BaseUrl
               value: "http://ocr:8000"
             - name: Llm__BaseUrl

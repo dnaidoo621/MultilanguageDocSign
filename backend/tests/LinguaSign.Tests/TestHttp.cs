@@ -34,4 +34,17 @@ public static class TestHttp
         };
         return new HttpClient(new StubHttpMessageHandler(resp)) { BaseAddress = new Uri("http://localhost/v1/") };
     }
+
+    /// <summary>
+    /// HttpClient whose /translate response returns <paramref name="responseJson"/> verbatim
+    /// (mimicking the LinguaSign translation sidecar).
+    /// </summary>
+    public static HttpClient TranslationClient(string responseJson)
+    {
+        var resp = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseJson, Encoding.UTF8, "application/json"),
+        };
+        return new HttpClient(new StubHttpMessageHandler(resp)) { BaseAddress = new Uri("http://localhost/") };
+    }
 }

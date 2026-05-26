@@ -1,0 +1,10 @@
+# Runtime dependencies only — no transformers needed at inference time.
+# Requires Python 3.10+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+# CTranslate2: fast C++ inference for MarianMT and NLLB models.
+# On ARM64/macOS it links against Apple's Accelerate framework for BLAS.
+ctranslate2>=4.4.0
+# SentencePiece: tokenization for MarianMT source/target languages.
+sentencepiece>=0.2.0

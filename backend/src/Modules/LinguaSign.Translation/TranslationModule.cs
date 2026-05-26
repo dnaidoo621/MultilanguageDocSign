@@ -21,13 +21,32 @@ public static class TranslationModule
         services.AddScoped<ITranslationService, TranslationService>();
         services.AddScoped<ITranslationProcessingService, TranslationProcessingService>();
 
-        services.AddHttpClient<ILlmTranslator, OllamaTranslator>(client =>
+        // Engine selection: Translation:Engine = "marian" (default) | "ollama" (fallback).
+        // Switch back to Ollama at any time with: Translation:Engine=ollama
+        var engine = config["Translation:Engine"] ?? "marian";
+
+        if (string.Equals(engine, "ollama", StringComparison.OrdinalIgnoreCase))
         {
-            // Trailing slash is required so relative request paths keep the "/v1" segment.
-            var baseUrl = (config["Llm:BaseUrl"] ?? "http://localhost:11434/v1").TrimEnd('/') + "/";
-            client.BaseAddress = new Uri(baseUrl);
-            client.Timeout = TimeSpan.FromMinutes(10);
-        });
+            // Original Ollama path — kept so reverting is a one-line config change.
+            services.AddHttpClient<ILlmTranslator, OllamaTranslator>(client =>
+            {
+                // Trailing slash is required so relative request paths keep the "/v1" segment.
+                var baseUrl = (config["Llm:BaseUrl"] ?? "http://localhost:11434/v1").TrimEnd('/') + "/";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromMinutes(10);
+            });
+        }
+        else
+        {
+            // MarianMT sidecar path (default) — ~500 MB RAM, ~2–4 s/page.
+            // The sidecar must be running on Translation:SidecarUrl (default :8001).
+            services.AddHttpClient<ILlmTranslator, MarianTranslator>(client =>
+            {
+                var sidecarUrl = (config["Translation:SidecarUrl"] ?? "http://localhost:8001").TrimEnd('/') + "/";
+                client.BaseAddress = new Uri(sidecarUrl);
+                client.Timeout = TimeSpan.FromMinutes(5);
+            });
+        }
 
         return services;
     }

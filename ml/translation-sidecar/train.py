@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import os
 from pathlib import Path
 from typing import Any
 
@@ -82,21 +81,18 @@ def make_dataset(sources: list[str], targets: list[str]):
 # ---------------------------------------------------------------------------
 
 def preprocess_function(examples: dict[str, Any], tokenizer, max_length: int = 128):
-    """Tokenise a batch of source/target pairs for seq2seq training."""
+    """Tokenise a batch of source/target pairs for seq2seq training.
+
+    Uses the ``text_target`` keyword (transformers ≥ 4.21) instead of the
+    deprecated ``tokenizer.as_target_tokenizer()`` context manager.
+    """
     model_inputs = tokenizer(
         examples["src"],
+        text_target=examples["tgt"],
         max_length=max_length,
         truncation=True,
         padding=False,
     )
-    with tokenizer.as_target_tokenizer():
-        labels = tokenizer(
-            examples["tgt"],
-            max_length=max_length,
-            truncation=True,
-            padding=False,
-        )
-    model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
 
@@ -168,6 +164,18 @@ def train(
     eval_dataset = eval_dataset.map(preprocess, batched=True, remove_columns=["src", "tgt"])
 
     # ---- training args ----
+    #
+    # Precision notes:
+    #   - CUDA:  fp16=True  gives half-memory, same speed or faster.
+    #   - MPS:   bf16=True  is natively supported by Apple Accelerate and avoids
+    #            the overflow range issues of fp16 on ARM. MPS does NOT support fp16.
+    #   - CPU:   float32 only; neither flag set.
+    #
+    # use_mps_device was removed from TrainingArguments in transformers 4.46; MPS is
+    # now auto-detected by PyTorch, so we do not pass it at all.
+    #
+    # eval_strategy was added in 4.46 (renamed from evaluation_strategy).  We use
+    # evaluation_strategy which is valid across the full >=4.40,<5 pin range.
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     training_args = Seq2SeqTrainingArguments(
         output_dir=output_dir,
@@ -178,14 +186,14 @@ def train(
         warmup_steps=min(500, len(train_dataset) // (batch_size * 4)),
         weight_decay=0.01,
         logging_steps=max(1, len(train_dataset) // (batch_size * 20)),
-        eval_strategy="epoch",
+        evaluation_strategy="epoch",   # compatible with transformers 4.40–4.x
         save_strategy="epoch",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        predict_with_generate=False,  # faster; we don't compute BLEU during training
-        fp16=(device == "cuda"),       # fp16 on CUDA only; MPS and CPU use float32
-        use_mps_device=(device == "mps"),
+        predict_with_generate=False,   # faster; we don't compute BLEU during training
+        fp16=(device == "cuda"),
+        bf16=(device == "mps"),        # bf16 on Apple Silicon MPS — faster than float32
         report_to="none",
     )
 

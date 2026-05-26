@@ -8,6 +8,11 @@ models/**/
 # Allow the .gitkeep placeholder
 !models/.gitkeep
 
+# Training data — large HuggingFace corpus files are not committed
+# data/legal_pairs.tsv (synthetic, small) IS committed
+data/legal_filtered.tsv
+data/legal_pairs_progress.json
+
 # Python venv and cache
 .venv/
 __pycache__/

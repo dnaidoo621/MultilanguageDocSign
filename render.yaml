@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: linguasign-api
+    runtime: docker
+    # Build context is the backend/ directory (matches Dockerfile COPY . .)
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+
+      # Supabase Postgres — set in Render dashboard (Settings > Environment)
+      - key: ConnectionStrings__Postgres
+        sync: false
+
+      # Supabase Auth — set in Render dashboard
+      - key: Supabase__Url
+        sync: false
+      - key: Supabase__JwtSecret
+        sync: false
+
+      # OCR sidecar — use HuggingFace Space URL once deployed
+      # e.g. https://<your-hf-username>-linguasign-ocr.hf.space
+      - key: Ocr__BaseUrl
+        sync: false
+
+      # Translation sidecar — use HuggingFace Space URL once deployed
+      # e.g. https://<your-hf-username>-linguasign-translation.hf.space
+      - key: Translation__Engine
+        value: marian
+      - key: Translation__SidecarUrl
+        sync: false
+
+      # LLM — point at Groq (free tier, OpenAI-compatible)
+      # Model: llama-3.1-8b-instant  or  llama3-70b-8192  or  mixtral-8x7b-32768
+      - key: Llm__BaseUrl
+        value: https://api.groq.com/openai/v1
+      - key: Llm__Model
+        value: llama-3.1-8b-instant
+      - key: Llm__ApiKey
+        sync: false   # get from console.groq.com > API Keys
+
+      # CORS — set to your Vercel deployment URL (e.g. https://linguasign.vercel.app)
+      # Separate multiple origins with a comma: https://foo.vercel.app,https://linguasign.com
+      - key: Cors__Origins
+        sync: false
+
+      # File storage — /tmp is ephemeral but fine for demos (signed PDFs are re-downloadable)
+      - key: Storage__LocalRoot
+        value: /tmp/linguasign

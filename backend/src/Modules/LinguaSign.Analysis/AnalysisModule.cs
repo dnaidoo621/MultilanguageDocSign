@@ -25,6 +25,12 @@ public static class AnalysisModule
             var baseUrl = (config["Llm:BaseUrl"] ?? "http://localhost:11434/v1").TrimEnd('/') + "/";
             client.BaseAddress = new Uri(baseUrl);
             client.Timeout = TimeSpan.FromMinutes(10);
+            // Groq / OpenAI-hosted models require a Bearer token.
+            // Leave blank for local Ollama (no auth needed).
+            var apiKey = config["Llm:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
         });
 
         return services;
